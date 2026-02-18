@@ -405,20 +405,29 @@ namespace Multiplayer
     {
         AZStd::vector<NetEntityId> removeList;
         removeList.swap(m_removeList);
-        for (NetEntityId entityId : removeList)
+        for (const NetEntityId netEntityId : removeList)
         {
-            NetworkEntityHandle removeEntity = m_networkEntityTracker.Get(entityId);
+            NetworkEntityHandle networkEntityHandle = m_networkEntityTracker.Get(netEntityId);
+            AZ::Entity* entity = networkEntityHandle.GetEntity();
 
-            if (removeEntity != nullptr)
+            if (entity != nullptr)
             {
+                const AZ::EntityId entityId = entity->GetId();
+
+                // First, deactivate the entity, to guarantee that `NotifyControllersDeactivated` has been called. TODO: Further
+                // document the case we are accounting for about `SpawnableEntitiesManager` queued despawning. And also consider solving
+                // this at a core level, by having `GameEntityContextComponent::DestroyGameEntityInternal` deactivate the entity.
+                AzFramework::GameEntityContextRequestBus::Broadcast(
+                    &AzFramework::GameEntityContextRequestBus::Events::DeactivateGameEntity, entityId);
+
                 // If we've spawned entities through @NetworkEntityManager::CreateEntitiesImmediate
                 // then we destroy those entities here by processing the removal list.
                 // Note that if we've spawned entities through @NetworkPrefabSpawnerComponent::SpawnPrefab
                 // we should instead use the SpawnableEntitiesManager to destroy them.
                 AzFramework::GameEntityContextRequestBus::Broadcast(
-                    &AzFramework::GameEntityContextRequestBus::Events::DestroyGameEntity, removeEntity.GetEntity()->GetId());
+                    &AzFramework::GameEntityContextRequestBus::Events::DestroyGameEntity, entityId);
 
-                m_networkEntityTracker.erase(entityId);
+                m_networkEntityTracker.erase(netEntityId);
             }
         }
     }
